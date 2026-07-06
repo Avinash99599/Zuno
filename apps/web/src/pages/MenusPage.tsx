@@ -237,7 +237,7 @@ function MenuForm({ item, onSubmit }: { item?: MockMenuItem | null; onSubmit: (n
         </div>
         <div className="space-y-1.5">
           <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Category</label>
-          <select value={category} onChange={(e) => setCategory(e.target.value)} className={cn("w-full h-10 px-3.5 rounded-xl text-sm bg-muted/50 border border-border/50 focus:outline-none focus:border-primary/30 transition-all duration-200 cursor-pointer")}>
+          <select value={category} onChange={(e) => setCategory(e.target.value as any)} className={cn("w-full h-10 px-3.5 rounded-xl text-sm bg-muted/50 border border-border/50 focus:outline-none focus:border-primary/30 transition-all duration-200 cursor-pointer")}>
             {categories.filter((c) => c !== "All").map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
