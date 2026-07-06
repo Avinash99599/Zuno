@@ -1,0 +1,230 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Extracted from Supabase Database (Introspected) ───
+
+model customers {
+  id         String    @id @db.Uuid
+  name       String?
+  phone      String?
+  email      String?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  orders     orders[]
+}
+
+model menu_items {
+  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  restaurant_id String        @db.Uuid
+  name          String
+  category      String
+  price         Decimal       @db.Decimal(10, 2)
+  description   String?
+  photo_url     String?
+  is_veg        Boolean?      @default(true)
+  is_available  Boolean?      @default(true)
+  created_at    DateTime?     @default(now()) @db.Timestamptz(6)
+  serves        Int?
+  restaurants   restaurants   @relation(fields: [restaurant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  order_items   order_items[]
+
+  @@unique([restaurant_id, name])
+  @@index([restaurant_id], map: "idx_menu_items_restaurant")
+}
+
+model order_items {
+  id             String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  order_id       String     @db.Uuid
+  menu_item_id   String     @db.Uuid
+  quantity       Int        @default(1)
+  notes          String?
+  price_at_order Decimal    @db.Decimal(10, 2)
+  created_at     DateTime?  @default(now()) @db.Timestamptz(6)
+  menu_items     menu_items @relation(fields: [menu_item_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  orders         orders     @relation(fields: [order_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([order_id], map: "idx_order_items_order")
+}
+
+model order_status_log {
+  id         String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  order_id   String       @db.Uuid
+  status     order_status
+  changed_at DateTime?    @default(now()) @db.Timestamptz(6)
+  orders     orders       @relation(fields: [order_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([order_id], map: "idx_status_log_order")
+}
+
+model orders {
+  id                   String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customer_id          String             @db.Uuid
+  restaurant_id        String             @db.Uuid
+  status               order_status?      @default(pending_payment)
+  arrival_time         DateTime?          @db.Timestamptz(6)
+  estimated_ready_time DateTime?          @db.Timestamptz(6)
+  total_amount         Decimal            @default(0) @db.Decimal(10, 2)
+  advance_paid_amount  Decimal?           @default(0) @db.Decimal(10, 2)
+  remaining_amount     Decimal?           @default(0) @db.Decimal(10, 2)
+  payment_status       payment_status?    @default(pending)
+  payment_reference    String?
+  created_at           DateTime?          @default(now()) @db.Timestamptz(6)
+  order_items          order_items[]
+  order_status_log     order_status_log[]
+  customers            customers          @relation(fields: [customer_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  restaurants          restaurants        @relation(fields: [restaurant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([customer_id], map: "idx_orders_customer")
+  @@index([restaurant_id], map: "idx_orders_restaurant")
+}
+
+model restaurants {
+  id                    String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                  String       @unique
+  cuisine_tags          String[]     @default([])
+  address               String?
+  photo_url             String?
+  avg_prep_time_minutes Int?         @default(20)
+  rating                Decimal?     @default(4.0) @db.Decimal(2, 1)
+  is_open               Boolean?     @default(true)
+  created_at            DateTime?    @default(now()) @db.Timestamptz(6)
+  menu_items            menu_items[]
+  orders                orders[]
+}
+
+enum order_status {
+  pending_payment
+  confirmed
+  preparing
+  ready
+  completed
+  cancelled
+  no_show
+}
+
+enum payment_status {
+  pending
+  advance_paid
+  fully_paid
+  refunded
+}
+
+// ─── Admin Dashboard Owned Tables ───
+
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  name           String
+  passwordHash   String
+  avatar         String?
+  role           UserRole  @default(RESTAURANT_OWNER)
+  isActive       Boolean   @default(true)
+  lastLogin      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  sessions       Session[]
+  auditLogs      AuditLog[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  RESTAURANT_OWNER
+  RESTAURANT_MANAGER
+  SUPPORT_TEAM
+  CUSTOMER_SUPPORT
+  FINANCE_TEAM
+  DELIVERY_MANAGER
+}
+
+model RolePermission {
+  id       String             @id @default(cuid())
+  role     UserRole
+  resource PermissionResource
+  action   PermissionAction
+
+  @@unique([role, resource, action])
+  @@map("role_permissions")
+}
+
+enum PermissionResource {
+  RESTAURANTS
+  CUSTOMERS
+  ORDERS
+  RESERVATIONS
+  MENUS
+  PAYMENTS
+  ANALYTICS
+  REVIEWS
+  SETTINGS
+  USERS
+  SUPPORT_TICKETS
+  FINANCE
+  TABLES
+  OFFERS
+  NOTIFICATIONS
+}
+
+enum PermissionAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  APPROVE
+  REJECT
+  SUSPEND
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  refreshToken String   @unique
+  userAgent    String?
+  ipAddress    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String
+  resource   String
+  resourceId String?
+  details    String?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([resource])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Setting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  type        String   @default("string")
+  description String   @default("")
+  category    String   @default("general")
+  updatedAt   DateTime @updatedAt
+
+  @@map("settings")
+}
